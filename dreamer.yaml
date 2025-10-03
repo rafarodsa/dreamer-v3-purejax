@@ -1,0 +1,221 @@
+replay_buffer:
+  buffer_size: 5e5
+  batch_size: 16
+  batch_length: 64
+
+rssm:
+  hidden_dim: 256
+  latent_classes: 32
+  latent_categoricals: 32
+  memory_dim: ${eval:8*${rssm.hidden_dim}}
+  state_dim: ${eval:${rssm.memory_dim}+${rssm.latent_classes}*${rssm.latent_categoricals}}
+  n_actions: ${params.n_actions}
+  pixels: false
+  n_bins: ${params.n_bins}
+  
+  obs_embed:
+    type: mlp
+    hidden_dims: ["${rssm.hidden_dim}", "${rssm.hidden_dim}"]
+    activation: silu
+    normalize: rms
+    outact: none
+    output_dim: ${rssm.hidden_dim}
+  decoder:
+    type: 'mlp'
+    hidden_dims: ["${rssm.hidden_dim}", "${rssm.hidden_dim}"]
+    activation: silu
+    normalize: rms
+    outact: none
+    input_dim: ${rssm.state_dim}
+
+  obs_embed_pixel:
+    type: residual_encoder
+    mlp_layers: [256, 256, "${rssm.hidden_dim}"]
+    depth: 24
+    mlp_activation: silu
+    cnn_activation: silu
+    min_resolution: 4
+    cnn_blocks: 2
+    output_dim: ${rssm.hidden_dim}
+  decoder_pixel:
+    type: residual_decoder
+    mlp_layers: ["${rssm.state_dim}", 256, 256]
+    depth: 24
+    mlp_activation: silu
+    cnn_activation: silu
+    min_resolution: 4
+    cnn_blocks: 2
+  
+  encoder:
+    type: mlp
+    hidden_dims: ["${rssm.hidden_dim}"]
+    activation: silu
+    normalize: rms
+    outact: none
+    input_dim: ${eval:${rssm.memory_dim}+${rssm.hidden_dim}}
+    # input_dim: ${eval:4*${rssm.hidden_dim}}
+    output_dim: ${eval:${rssm.latent_classes}*${rssm.latent_categoricals}}
+
+  embed:
+    type: mlp
+    hidden_dims: ["${rssm.hidden_dim}"]
+    output_dim: ${rssm.hidden_dim}
+    activation: silu
+    normalize : rms
+    outact: none
+  
+  rnn:
+    type: blockgru
+    groups: 8
+    # type: gru
+    input_dim: ${eval:3*${rssm.hidden_dim}}
+    hidden_dim: ${rssm.memory_dim}
+  
+  dynamics:
+    type: mlp
+    hidden_dims: ["${rssm.hidden_dim}", "${rssm.hidden_dim}"]
+    activation: silu
+    normalize: rms
+    outact: none
+    input_dim: ${rssm.memory_dim}
+    # input_dim: ${eval:3*${rssm.hidden_dim}}
+    output_dim: ${eval:${rssm.latent_classes}*${rssm.latent_categoricals}}
+
+  reward:
+    type: mlp
+    hidden_dims: ["${rssm.hidden_dim}"]
+    input_dim: ${rssm.state_dim}
+    output_dim: ${rssm.n_bins}
+    activation: silu
+    normalize : rms
+    outact: none
+    zero_out_init : true
+
+  cont:
+    type: mlp
+    hidden_dims: ["${rssm.hidden_dim}"]
+    input_dim: ${rssm.state_dim}
+    output_dim: 1
+    activation: silu
+    normalize : rms
+    outact: none
+  
+actor_critic:
+  hidden_dim: ${rssm.hidden_dim}
+  state_dim: ${rssm.state_dim}
+  n_actions: ${rssm.n_actions}
+  n_bins: ${params.n_bins}
+  v_min: ${params.v_min}
+  v_max: ${params.v_max}
+
+  actor:
+    type: mlp
+    hidden_dims: ["${actor_critic.hidden_dim}", "${actor_critic.hidden_dim}", "${actor_critic.hidden_dim}"]
+    input_dim: ${actor_critic.state_dim}
+    output_dim: ${actor_critic.n_actions}
+    activation: silu
+    normalize : rms
+    outact: none
+    # zero_out_init : true
+  critic:
+    type: mlp
+    hidden_dims: ["${actor_critic.hidden_dim}", "${actor_critic.hidden_dim}", "${actor_critic.hidden_dim}"]
+    output_dim: ${actor_critic.n_bins}
+    input_dim: ${actor_critic.state_dim}
+    activation: silu
+    normalize : rms
+    outact: none
+    zero_out_init : true
+
+seed: 0
+eval_every: 10000
+eval_n_episodes: 10
+eval_max_length: 1000
+timesteps:  1e7
+n_envs: 16
+env: asterix
+outdir: rl_experiments/
+exp_id: dreamerv3
+
+envs:
+  asterix:
+    env_name: 'gymnax_Asterix-MinAtar'
+    n_envs: ${n_envs}
+    render: true
+    autoreset: false
+    env_params : {noise_sigma: 0.01}
+  spaceinvaders:
+    env_name: 'gymnax_SpaceInvaders-MinAtar'
+    n_envs: ${n_envs}
+    render: true
+    autoreset: false
+    env_params : {noise_sigma: 0.01}
+  freeway:
+    env_name: 'gymnax_Freeway-MinAtar'
+    n_envs: ${n_envs}
+    render: true
+    autoreset: false
+    env_params : {noise_sigma: 0.01}
+  breakout:
+    env_name: 'gymnax_Breakout-MinAtar'
+    n_envs: ${n_envs}
+    render: true
+    autoreset: false
+    env_params : {noise_sigma: 0.01}
+  four_rooms:
+    env_name: 'navix_FourRooms-v0'
+    n_envs: ${n_envs}
+    env_params: {max_steps: 500}
+    action_space: full
+    observation_space: rgb
+    autoreset: false
+    img_size: 32
+    noise_sigma: 0.01
+
+  taxi_gymnax:
+    env_name: taxi_gymnax
+    img_size: 32
+    n_envs: ${n_envs}
+    n_passengers: 1
+    grid_size: 10
+    observation_space: rgb
+    max_steps_in_episode: 100
+  doorkey:
+    env_name: 'navix_DoorKey-8x8-v0'
+    n_envs: ${n_envs}
+    env_params: {max_steps: 500}
+    action_space: full
+    observation_space: rgb
+    autoreset: false
+    img_size: 32
+
+params:
+  action_repeat: 1
+  n_actions: 2
+  rollout_length: 1
+  replay_ratio: 32
+  v_min: -20
+  v_max: 20
+  n_bins: 255
+  lambd: 0.95
+  gamma: 0.997
+  entropy_reg: 3e-4
+  lr: 4e-5
+  warmup: 1000 # updates
+  imagination_horizon: 15
+  grad_clip: 0.3
+  unimix : 0.01
+  free_nats: 1.
+  rep_loss_const: 0.1
+  reconst_loss_const: 1.
+  dynamics_loss_const: 1.
+  critic_loss_const: 1.
+  critic_replay_loss_const: 0.3
+  critic_ema_reg: 1.
+  critic_ema_tau: 0.02
+  actor_loss_scale: 1.
+  actor_entropy_reg: 3e-4
+  actor_perc_low : 5
+  actor_perc_high: 95
+  actor_ret_limit: 1.
+  actor_ret_decay: 0.01

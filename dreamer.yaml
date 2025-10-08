@@ -128,66 +128,13 @@ actor_critic:
     zero_out_init : true
 
 seed: 0
-eval_every: 10000
+eval_every: ${n_envs}
 eval_n_episodes: 10
 eval_max_length: 1000
 timesteps:  1e7
-n_envs: 16
-env: asterix
+n_envs: 2
 outdir: rl_experiments/
 exp_id: dreamerv3
-
-envs:
-  asterix:
-    env_name: 'gymnax_Asterix-MinAtar'
-    n_envs: ${n_envs}
-    render: true
-    autoreset: false
-    env_params : {noise_sigma: 0.01}
-  spaceinvaders:
-    env_name: 'gymnax_SpaceInvaders-MinAtar'
-    n_envs: ${n_envs}
-    render: true
-    autoreset: false
-    env_params : {noise_sigma: 0.01}
-  freeway:
-    env_name: 'gymnax_Freeway-MinAtar'
-    n_envs: ${n_envs}
-    render: true
-    autoreset: false
-    env_params : {noise_sigma: 0.01}
-  breakout:
-    env_name: 'gymnax_Breakout-MinAtar'
-    n_envs: ${n_envs}
-    render: true
-    autoreset: false
-    env_params : {noise_sigma: 0.01}
-  four_rooms:
-    env_name: 'navix_FourRooms-v0'
-    n_envs: ${n_envs}
-    env_params: {max_steps: 500}
-    action_space: full
-    observation_space: rgb
-    autoreset: false
-    img_size: 32
-    noise_sigma: 0.01
-
-  taxi_gymnax:
-    env_name: taxi_gymnax
-    img_size: 32
-    n_envs: ${n_envs}
-    n_passengers: 1
-    grid_size: 10
-    observation_space: rgb
-    max_steps_in_episode: 100
-  doorkey:
-    env_name: 'navix_DoorKey-8x8-v0'
-    n_envs: ${n_envs}
-    env_params: {max_steps: 500}
-    action_space: full
-    observation_space: rgb
-    autoreset: false
-    img_size: 32
 
 params:
   action_repeat: 1

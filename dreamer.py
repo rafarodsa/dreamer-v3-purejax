@@ -5,28 +5,28 @@
 '''
 from functools import partial
 from typing import Tuple
+from collections.abc import Callable
 
 import argparse
 
 import jax
 import jax.numpy as jnp
 import chex
-import flax.nnx as nnx
 import optax
+import flax.nnx as nnx
+
 import flashbax as fbx
-import numpy as np
+import gymnax
+
 
 from tqdm import tqdm
 
-from src.jaxmodels_nnx import build_model
-from src.envs.envbuilder import EnvironmentBuilder
+from jaxmodels_nnx import build_model
 from utils.replayx import make_trajectory_buffer
-from utils.jaxutils import symlog, symexp, lambda_return, scale_by_momentum, inv_twohot
+from utils.jaxutils import symlog, symexp, scale_by_momentum, inv_twohot
 from utils.jaxutils import twohot as base_twohot
-from utils.loggers import JSONLogger, WandBLogger, MultiLogger
+from utils.loggers import JSONLogger, MultiLogger
 
-
-import pandas as pd
 from omegaconf import OmegaConf as oc
 
 
@@ -101,6 +101,19 @@ class ImaginedEpisode:
     action : chex.Array
     reward : chex.Array
     done : chex.Array
+
+@chex.dataclass(frozen=True)
+class EnvConfig:
+    obs: chex.Array
+    action: chex.Array
+    done: chex.Array
+    reward: chex.Array
+    env_reset: Callable
+    env_step: Callable
+    n_actions: int
+    n_envs: int
+    base_env : gymnax.environments.environment.Environment
+    env_params : gymnax.EnvParams
 
 class RSSM(nnx.Module):
     def __init__(
@@ -443,7 +456,7 @@ def get_dreamer_learn_fn(
         rng, rng_s = jax.random.split(rng)
         actor = nnx.merge(*agent.agent).actor
 
-        @partial(jax.vmap, in_axes=(0, 0, 0))
+        # @partial(jax.vmap, in_axes=(0, 0, 0))
         def rollout(env_state, last_step, rng):
             def _rollout(carry, unused):
                 env_state, rng, last_step = carry
@@ -499,9 +512,8 @@ def get_dreamer_learn_fn(
                     length=params.rollout_length
             )
             return env_state, last_step, experience, info
-        
-        env_state, last_step, experience, info = rollout(env_state, last_step, jax.random.split(rng_s, env_config.n_envs))
-
+        env_state, last_step, experience, info = jax.vmap(rollout, in_axes=(0, 0, 0))(env_state, last_step, jax.random.split(rng_s, env_config.n_envs))
+        print('rolled out')
         # add batch
         # experience = jax.tree.map(lambda x: x.swapaxes(1,0), experience)
         buffer_state = replay_buffer.add(agent.buffer_state, experience)
@@ -882,7 +894,6 @@ def get_dreamer_learn_fn(
         initial_latent = jax.tree.map(lambda x: jnp.broadcast_to(x, shape=(env_config.n_envs, *x.shape)), initial_latent)
         initial_action = jnp.zeros((env_config.n_envs,), dtype=jnp.int32) + env_config.n_actions
         initial_done = jnp.ones((env_config.n_envs,))
-
         return agent, env_state, rng, (init_obs, (initial_latent, initial_action), initial_done)
 
 
@@ -893,7 +904,10 @@ def get_dreamer_learn_fn(
             agent_training_state,
             jnp.arange(n_iters)
         )
+        # agent_training_state, logs = _train(agent_training_state, 0) 
+
         return agent_training_state, logs
+
 
     return init_learn_fn, learn_fn
 
@@ -997,22 +1011,8 @@ def get_eval_fn(
 
     return _eval
 
-def run(config):
-    # build dreamer agent
-    
-    env_config = EnvironmentBuilder.build(
-        config.envs[config.env], 
-        jax.random.PRNGKey(0)
-    )
-
+def run(config, env_config):
     logger = JSONLogger(config.outdir, config.exp_id)
-    
-    # wandb_logger = WandBLogger(
-    #     config.outdir,
-    #     config.exp_id,
-    #     project='rainbow',
-    #     config=agent_params
-    # )
 
     loggers = MultiLogger(
         [logger]
@@ -1039,7 +1039,8 @@ def run(config):
         update_ratio,
         config.replay_buffer.batch_size * config.replay_buffer.batch_length
     )
-    learn_fn = jax.jit(learn_fn, static_argnums=0)
+    # learn_fn = jax.jit(learn_fn, static_argnums=0)
+
     rng = jax.random.key(config.seed)
     agent_training_state = learn_init_fn(agent, rng)
     
@@ -1080,10 +1081,44 @@ def run(config):
 
 if __name__=="__main__":
     from utils.oc_parser import parse_oc_args
+    from gymnax_wrappers import LogWrapper, DreamerWrapper
+
     parser = argparse.ArgumentParser()
-    parser.add_argument('--config', type=str, default='src/agents/dreamer.yaml')
+    parser.add_argument('--config', type=str, default='./dreamer.yaml')
+    parser.add_argument('--env', type=str, default='CartPole-v1')
     args, extra_args = parser.parse_known_args()
     config = oc.load(args.config)
     cli_args = parse_oc_args(extra_args)
     config = oc.merge(config, cli_args)
-    run(config)
+
+    ### create env
+
+    try:
+        base_env, env_params = gymnax.make(args.env) # this env autoresets
+        env = LogWrapper(DreamerWrapper(base_env))
+        rng = jax.random.key(0)
+        obs, env_state = env.reset(rng, env_params)
+        action = env.action_space(env_params).sample(rng)
+        obs, env_state, reward, done, info = env.step(rng, env_state, action, env_params)
+
+
+        env_config = EnvConfig(
+            obs=obs,
+            action=action,
+            done=done,
+            reward=reward,
+            n_actions=base_env.action_space(env_params).n,
+            env_reset=partial(env.reset, params=env_params),
+            env_step=partial(env.step, params=env_params),
+            n_envs=config.n_envs,
+            base_env=base_env,
+            env_params=env_params
+        )
+
+
+
+    except Exception as e:
+        print(f"Error creating env {args.env}: {e}")
+        exit(1)
+
+    run(config, env_config)

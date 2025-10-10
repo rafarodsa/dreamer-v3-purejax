@@ -513,7 +513,7 @@ def get_dreamer_learn_fn(
             )
             return env_state, last_step, experience, info
         env_state, last_step, experience, info = jax.vmap(rollout, in_axes=(0, 0, 0))(env_state, last_step, jax.random.split(rng_s, env_config.n_envs))
-        print('rolled out')
+
         # add batch
         # experience = jax.tree.map(lambda x: x.swapaxes(1,0), experience)
         buffer_state = replay_buffer.add(agent.buffer_state, experience)
@@ -1039,7 +1039,7 @@ def run(config, env_config):
         update_ratio,
         config.replay_buffer.batch_size * config.replay_buffer.batch_length
     )
-    # learn_fn = jax.jit(learn_fn, static_argnums=0)
+    learn_fn = jax.jit(learn_fn, static_argnums=0)
 
     rng = jax.random.key(config.seed)
     agent_training_state = learn_init_fn(agent, rng)

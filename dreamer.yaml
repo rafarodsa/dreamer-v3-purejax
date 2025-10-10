@@ -132,7 +132,7 @@ eval_every: ${n_envs}
 eval_n_episodes: 10
 eval_max_length: 1000
 timesteps:  1e7
-n_envs: 2
+n_envs: 16
 outdir: rl_experiments/
 exp_id: dreamerv3
 

@@ -2,9 +2,6 @@
 
 A **from-scratch, readable DreamerV3** implementation in **pure JAX** for easy reproduction and adaptation.
 
----
-
-## Why this repo?
 
 - **Pure JAX**: no heavy frameworks; modules live in `jaxmodels_nnx.py` and simple utilities in `utils/`.
 - **Educational structure**: world model + actor + critic kept separate; training loop is easy to trace in `dreamer.py`.

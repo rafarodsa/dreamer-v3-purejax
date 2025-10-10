@@ -128,7 +128,7 @@ actor_critic:
     zero_out_init : true
 
 seed: 0
-eval_every: ${n_envs}
+eval_every: 10000
 eval_n_episodes: 10
 eval_max_length: 1000
 timesteps:  1e7

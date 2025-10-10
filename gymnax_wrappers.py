@@ -25,14 +25,6 @@ from gymnax.environments.spaces import Discrete as GymnaxDiscrete, Box as Gymnax
 
 from functools import partial
 
-# Import dependency graph modules
-# from .navix_dependency_graph import (
-#     create_environment_specific_dependency_graph,
-#     generate_adjacency_matrix,
-#     get_action_dependent_variables,
-# )
-# from .navix_dependency_graph import create_conditional_dependency_graph
-
 class DreamerWrapper(GymnaxWrapper):
 
     @functools.partial(jax.jit, static_argnums=(0,))

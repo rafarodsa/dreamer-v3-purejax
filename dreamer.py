@@ -1103,7 +1103,6 @@ if __name__=="__main__":
         obs, env_state = env.reset(rng, env_params)
         action = env.action_space(env_params).sample(rng)
         obs, env_state, reward, done, info = env.step(rng, env_state, action, env_params)
-        import ipdb; ipdb.set_trace()
 
         env_config = EnvConfig(
             obs=obs,

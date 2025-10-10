@@ -33,7 +33,8 @@ python dreamer.py --config dreamer.yaml --env CartPole-v1
 ## Caveats / TODOs
 
 - Currently it only works with [Gymnax](https://github.com/RobertTLange/gymnax) environments;
-- DreamerWrapper was added to remove the autoreset feature of Gymnax/
+- DreamerWrapper was added to remove the autoreset feature of Gymnax.
+- The main script assumes discrete actions. TODO: add continuous action policies.
 
 ## References
 

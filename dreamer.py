@@ -2,6 +2,7 @@
     DreamerV3 re-implementation
     author: Rafael Rodriguez-Sanchez
     date: October 2024
+    modified: October 2025
 '''
 from functools import partial
 from typing import Tuple
@@ -28,7 +29,7 @@ from utils.jaxutils import twohot as base_twohot
 from utils.loggers import JSONLogger, MultiLogger
 
 from omegaconf import OmegaConf as oc
-
+from utils.printarr import printarr
 
 oc.register_new_resolver("eval", eval)
 tree_map = jax.tree.map
@@ -456,7 +457,7 @@ def get_dreamer_learn_fn(
         rng, rng_s = jax.random.split(rng)
         actor = nnx.merge(*agent.agent).actor
 
-        # @partial(jax.vmap, in_axes=(0, 0, 0))
+        @partial(jax.vmap, in_axes=(0, 0, 0))
         def rollout(env_state, last_step, rng):
             def _rollout(carry, unused):
                 env_state, rng, last_step = carry
@@ -498,7 +499,7 @@ def get_dreamer_learn_fn(
                 transition = Episode( # t
                     obs=obs,# o_t
                     action=sg(action), # a_t
-                    reward=reward, # r_t
+                    reward=reward.astype(jnp.float32), # r_t
                     done=done, #d_t
                     latent=sg(latent), # h_t, z_t
                     is_first=last_done
@@ -512,7 +513,8 @@ def get_dreamer_learn_fn(
                     length=params.rollout_length
             )
             return env_state, last_step, experience, info
-        env_state, last_step, experience, info = jax.vmap(rollout, in_axes=(0, 0, 0))(env_state, last_step, jax.random.split(rng_s, env_config.n_envs))
+
+        env_state, last_step, experience, info = rollout(env_state, last_step, jax.random.split(rng_s, env_config.n_envs))
 
         # add batch
         # experience = jax.tree.map(lambda x: x.swapaxes(1,0), experience)
@@ -754,14 +756,15 @@ def get_dreamer_learn_fn(
                 replay_values = inv_twohot(nnx.softmax(replay_value_logits, -1), bins)
 
                 # ep labels
+
                 _, sum_rewards = jax.lax.scan(
-                    lambda r, x: ((1-x.is_first) * r + x.reward, (1-x.is_first) * r + x.reward),
+                    lambda r, x: ((1-x.is_first.astype(jnp.float32)) * r + x.reward, (1-x.is_first.astype(jnp.float32)) * r + x.reward),
                     _data.reward[:, 0],
                     swapaxes(tree_map(lambda x: x[:, 1:], _data))
                 )
                 # sum_rewards = swapaxes(sum_rewards)
-                # sum_rewards = (sum_rewards * _data.done[:, 1:]).sum(-1) + sum_rewards[:, 0] + sum_rewards[:, -1] * (1-_data.is_first[:, -1])
-                # sum_rewards =  sum_rewards/(_data.done[:, 1:].sum(-1) + 1 + (1-_data.is_first[:, -1]))
+                # sum_rewards = (sum_rewards * _data.done[:, 1:]).sum(-1) + sum_rewards[:, 0] + sum_rewards[:, -1] * (1-_data.is_first[:, -1].astype(jnp.float32))
+                # sum_rewards =  sum_rewards/(_data.done[:, 1:].sum(-1) + 1 + (1-_data.is_first[:, -1].astype(jnp.float32)))
 
                 replay_critic_logs = {
                     'replay_critic/loss': replay_critic_loss,
@@ -1100,13 +1103,13 @@ if __name__=="__main__":
         obs, env_state = env.reset(rng, env_params)
         action = env.action_space(env_params).sample(rng)
         obs, env_state, reward, done, info = env.step(rng, env_state, action, env_params)
-
+        import ipdb; ipdb.set_trace()
 
         env_config = EnvConfig(
             obs=obs,
             action=action,
             done=done,
-            reward=reward,
+            reward=reward.astype(jnp.float32),
             n_actions=base_env.action_space(env_params).n,
             env_reset=partial(env.reset, params=env_params),
             env_step=partial(env.step, params=env_params),
